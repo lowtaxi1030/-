@@ -47,37 +47,69 @@ class CR:  # ColoredRect
             pygame.draw.rect(surface, self.color, self.rect)
 
 
+Color = tuple[int, int, int]
+
+
 class Colors:
     """提供各種顏色 (依色相與色調排序)"""
 
-    # --- 暖色系 (紅、橙、黃、金) ---
+    # 1. 基礎與深色系 (最適合當遊戲背景)
+    # 這組顏色飽和度較低或亮度較暗，不會干擾玩家看清子彈或敵人。
+
+    BLACK = (0, 0, 0)
+    BLACK2 = (30, 30, 30)  # 推薦：World 1 背景
+    BLACK_3 = (60, 60, 60)
+    DARK_GRAY = (90, 90, 90)
+    BLUE3 = (50, 0, 100)  # 推薦：神祕關卡背景
+    TYRIAN_PURPLE = (102, 2, 60)  # 推薦：Boss 關背景
+
+    # 2. 暖色調 (紅、橙、黃、金)
+    # 這組適合當「警示」、「熔岩世界」或「解鎖按鈕」。
+
     RED = (255, 0, 0)
     RED_2 = (200, 0, 0)
     DARK_RED = (160, 0, 0)
+    LIGHT_RED = (255, 80, 80)
+    VERMILION = (255, 50, 0)
     ORANGE = (255, 100, 0)
     ORANGE2 = (200, 50, 0)
-    YELLOW = (255, 255, 0)
+    BROWN = (200, 100, 50)  # 推薦：荒漠世界
     GOLD = (255, 215, 0)
-    BROWN = (200, 100, 50)
+    YELLOW = (255, 255, 0)
 
-    # --- 綠色系 ---
+    # 3. 綠色調 (森林、草地、毒液)
+    DARK_GREEN = (0, 100, 0)  # 推薦：叢林背景
+    OLIVE = (127, 127, 0)
+    EMERALD = (80, 180, 130)
+    PARIS_GREEN = (80, 200, 120)
+    CHARTREUSE = (127, 255, 0)
     GREEN = (0, 255, 0)
-    DARK_GREEN = (0, 100, 0)
 
-    # --- 冷色系 (藍、青、紫、粉) ---
-    CYAN = (135, 206, 235)  # 天藍/青色
-    BLUE = (0, 0, 255)
+    # 4. 冷色調 (青、藍、紫、粉)
+    # 這組適合「水下世界」、「科技感」或「稀有皮膚」。
     BLUE2 = (0, 0, 170)
-    BLUE3 = (50, 0, 100)
+    BLUE = (0, 0, 255)
+    CYAN = (135, 206, 235)  # 推薦：冰雪/水下世界背景
+    VIOLET = (143, 0, 255)
     PURPLE = (128, 0, 128)
+    FUCHSIA = (255, 50, 180)
     PINK = (255, 0, 255)
+    CLARET = (191, 0, 64)
 
-    # --- 無彩色系 (白、灰、黑) ---
+    # 5. 高亮度與特殊色
+    # 適合文字、UI 邊框或發光特效。
+    COSMIC_LATTE = (255, 248, 231)
     WHITE = (255, 255, 255)
     GRAY = (150, 150, 150)
-    DARK_GRAY = (90, 90, 90)
-    BLACK2 = (30, 30, 30)
-    BLACK = (0, 0, 0)
+
+    # 萬聖節顏色
+    PUMPKIN_ORANGE = (255, 117, 24)
+    MIDNIGHT_PURPLE = (75, 0, 130) # 這跟你現在的 BLUE3 背景很搭！
+    SLIME_GREEN = (50, 205, 50)
+    BLOOD_RED = (138, 7, 7)
+
+    # 實驗中顏色
+    TEST_COLOR = (127, 255, 0)
 
     @staticmethod
     def get_color(color_name: str, default=WHITE):
@@ -86,21 +118,28 @@ class Colors:
             color_name = "ORANGE 2"
         if color_name.upper() == "LIGHT BLUE":
             color_name = "CYAN"
-        return getattr(Colors, color_name.upper(), default)
+        return getattr(Colors, color_name.upper().replace(" ", "_"), default)
 
     @staticmethod
-    def two_color_gradient(color1, color2, ratio):
+    def two_color_gradient(color1: Color, color2: Color, ratio: float):
         """ratio 是 color1 的比例，回傳兩個顏色的漸層色"""
+        ratio = num_range(0, 1, ratio)
         r = int(color1[0] * ratio + color2[0] * (1 - ratio))
         g = int(color1[1] * ratio + color2[1] * (1 - ratio))
         b = int(color1[2] * ratio + color2[2] * (1 - ratio))
         return (r, g, b)
 
     @staticmethod
-    def two_color_change(color1, color2, condition):
+    def two_color_wave(color1: Color, color2: Color, speed: int | float, time_func=p.time.get_ticks):
+        """根據時間在兩個顏色之間波動，\n time_func 是要用的時間函式，預設是 pygame 的 get_ticks()"""
+
+        ratio = (sin(time_func() / 1000.0 * speed) + 1) / 2  # 產生 0 到 1 的波動
+        return Colors.two_color_gradient(color1, color2, ratio)
+
+    @staticmethod
+    def two_color_change(color1: Color, color2: Color, condition: bool):
         """condition 為 True 時回傳 color1, 為 False 時回傳 color2"""
         return color1 if condition else color2
-
 
 def draw_rect(color, x, y, width=100, height=50, center=False, show=True):
     """單純方塊"""
@@ -113,22 +152,30 @@ def draw_rect(color, x, y, width=100, height=50, center=False, show=True):
         return button_rect
 
 
-def show_text(text, text_color, x, y, size=24, center=False, screen_center=False, show=True, font_type='microsoftjhenghei', alpha=255, line_gap=5):
-    t_rects = []
+_font_cache = {}
 
-    # 字體選擇邏輯
-    if font_type == "None":
-        font = p.font.SysFont(None, size)
-    else:
-        font = p.font.SysFont(font_type, size)
+
+def show_text(text, text_color, x, y, size=24, center=False, screen_center=False, show=True, font_type="microsoftjhenghei", alpha=255, line_gap=5):
+    global _font_cache
+    # 先檢查快取中是否已經有這個字體了
+
+    key = (font_type, size)
+    if key not in _font_cache:
+        if key not in _font_cache:
+            if font_type == "None":
+                _font_cache[key] = p.font.SysFont(None, size)
+            else:
+                _font_cache[key] = p.font.SysFont(font_type, size)
 
     if isinstance(text, str):
         text = [text]
 
+    t_rects = []
+
     current_y = y
     for t in text:
         # 渲染文字
-        t_surf = font.render(t, True, text_color)
+        t_surf = _font_cache[key].render(t, True, text_color)
 
         # 透明度處理
         temp_surf = p.Surface(t_surf.get_size(), p.SRCALPHA)
@@ -176,7 +223,7 @@ def text_button(
     b_center=F,
     size=28,
     show=T,
-    font_type='microsoftjhenghei',
+    font_type="microsoftjhenghei",
     alpha=255,
     border_radius=0,
     width_line=0,
