@@ -11,7 +11,12 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("找地雷")
 running, game_state = True, "menu"
 clock = pygame.time.Clock()
+
 start_time = 0
+
+total_paused_time = 0  # 總共暫停了多久（毫秒）
+pause_start_time = 0  # 記錄按下暫停的那一刻系統時間
+pause_game_time = 0
 
 # 按下偵測專區
 is_pressing = []
@@ -235,6 +240,9 @@ while running:
                     game_state = "menu"
                 if event.key == pygame.K_e:
                     config.show_info = not config.show_info
+                if event.key in [pygame.K_p, pygame.K_ESCAPE]:
+                    pause_start_time = runed_time
+                    game_state = "pause"
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 is_inside_map = 0 <= map_mouse_pos[0] < config.map_width and 0 <= map_mouse_pos[1] < config.map_height
@@ -243,6 +251,7 @@ while running:
                         if config.first_click:  # 第一次點擊
                             config.first_click_reset(map_mouse_pos)
                             start_time = runed_time  # 記錄開始時間
+                            total_paused_time = 0
                             config.first_click = False
                         if config.map[map_mouse_pos]["state"] == "flagged" or config.map[map_mouse_pos]["state"] == "opened":
                             pass  # 或是直接什麼都不寫，不進入後續判斷
@@ -259,7 +268,7 @@ while running:
                                 pygame.display.flip()
                                 pygame.time.wait(1000)
                                 game_state = "game_over: Lose"
-                                
+
                             else:
                                 # 沒踩到雷的邏輯（因為最外層已經擋掉 flagged，這裡絕對安全）
                                 config.reveal_empty(*map_mouse_pos)
@@ -286,7 +295,11 @@ while running:
                     f"插旗數: {tool.num_range(0, None, config.flags)}",
                     f"剩餘地雷: {"?" if config.first_click else config.map_bullets - config.flags}",
                     "遊戲時間:",
-                    f"{tool.show_time_min((runed_time - start_time) // 1000)}" if not config.first_click else "0:00",
+                    (
+                        f"{(pause_game_time := tool.show_time_min((runed_time - start_time - total_paused_time) // 1000))}"
+                        if not config.first_click
+                        else "0:00"
+                    ),
                 ],
                 tool.Colors.BLACK,
                 40,
@@ -294,6 +307,42 @@ while running:
                 line_gap=10,
             )
             tool.show_text("按'E'可以開關我", tool.Colors.BLACK, 40, 230)
+    elif game_state == "pause":
+        """畫出上一貞的畫面並模糊，作為背景"""
+        screen.fill(tool.Colors.YELLOW)
+        config.draw_minesweeper_map(screen, config.map)
+        if config.show_info:
+            pygame.draw.rect(screen, tool.Colors.YELLOW, (35, 10, 180, 270), border_radius=10)
+            tool.show_text(
+                [
+                    f"地雷數: {"?" if config.first_click else config.map_bullets}",
+                    f"插旗數: {tool.num_range(0, None, config.flags)}",
+                    f"剩餘地雷: {"?" if config.first_click else config.map_bullets - config.flags}",
+                    "遊戲時間:",
+                    f"{pause_game_time}" if not config.first_click else "0:00",
+                ],
+                tool.Colors.BLACK,
+                40,
+                20,
+                line_gap=10,
+            )
+            tool.show_text("按'E'可以開關我", tool.Colors.BLACK, 40, 230)
+        tool.screen_vague(20)
+        """"""
+        tool.show_text("暫停", tool.Colors.WHITE, 0, 50, size=40, screen_center=True)
+
+        resume_button = tool.text_button("繼續", tool.Colors.WHITE, tool.Colors.BLUE, 0, 120, 200, 60, b_center=True)
+
+        for event in events:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    # 計算這次暫停偷偷過了多久，並加到總暫停時間裡
+                    total_paused_time += runed_time - pause_start_time
+                    game_state = "start"
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if resume_button.collidepoint(mouse_pos):
+                    total_paused_time += runed_time - pause_start_time
+                    game_state = "start"
     # 結束
     elif game_state.startswith("game_over: "):
         screen.fill(tool.Colors.BLACK if game_state.endswith("Lose") else tool.Colors.GREEN)
@@ -314,7 +363,14 @@ while running:
             screen_center=True,
         )
         if game_state.endswith("Win"):
-            tool.show_text(f"用時: {tool.show_time_min(played_time)}", tool.Colors.WHITE, 0, 300, size=30, screen_center=True)
+            tool.show_text(
+                f"用時: {tool.show_time_min((runed_time - start_time - total_paused_time) // 1000)}",
+                tool.Colors.WHITE,
+                0,
+                300,
+                size=30,
+                screen_center=True,
+            )
         back_button = tool.text_button(
             "回到主選單",
             tool.Colors.WHITE,
